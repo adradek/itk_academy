@@ -1,0 +1,275 @@
+openapi: 3.1.1
+
+info:
+  title: Wallet API
+  version: 1.0.0
+  description: |
+    API для пополнения, списания и получения баланса кошелька
+
+    Суммы передаются целыми числами в минимальных денежных единицах.
+    Отрицательный баланс запрещён
+
+    Идемпотентность не предусмотрена: каждый повторный POST считается
+    отдельной операцией
+
+servers:
+  - url: http://localhost:8080
+    description: Адрес приложения
+
+tags:
+  - name: Wallets
+    description: Операции с кошельками
+
+paths:
+  /api/v1/wallet:
+    post:
+      tags: [Wallets]
+      operationId: changeWalletBalance
+      summary: Пополнить кошелёк или списать средства
+      description: |
+        DEPOSIT увеличивает баланс, WITHDRAW уменьшает его.
+        Сумма amount положительна для обеих операций
+
+        Успешный ответ возвращается после фиксации изменения в БД.
+        В ответе указан баланс непосредственно после этой операции
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WalletOperationRequest'
+            examples:
+              deposit:
+                summary: Пополнение на 1000 центов
+                value:
+                  walletId: 123e4567-e89b-42d3-a456-426614174000
+                  operationType: DEPOSIT
+                  amount: 1000
+              withdraw:
+                summary: Списание 1000 центов
+                value:
+                  walletId: 123e4567-e89b-42d3-a456-426614174000
+                  operationType: WITHDRAW
+                  amount: 1000
+      responses:
+        '200':
+          description: Операция выполнена, изменение баланса сохранено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletBalance'
+              examples:
+                deposited:
+                  summary: Результат пополнения пустого кошелька на 1000
+                  value:
+                    walletId: 123e4567-e89b-42d3-a456-426614174000
+                    balance: 1000
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/WalletNotFound'
+        '409':
+          description: |
+            Операция противоречит текущему состоянию кошелька:
+            недостаточно средств или пополнение превысит максимальный баланс.
+            Итог: операция не выполнена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                insufficientFunds:
+                  summary: Недостаточно средств для WITHDRAW
+                  value:
+                    code: INSUFFICIENT_FUNDS
+                    message: Недостаточно средств
+                balanceLimitExceeded:
+                  summary: DEPOSIT приведет к переполнению баланса
+                  value:
+                    code: BALANCE_LIMIT_EXCEEDED
+                    message: Превышен максимально допустимый баланс. Поступившие средства перенаправлены на благотворительность
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/wallets/{WALLET_UUID}:
+    get:
+      tags: [Wallets]
+      operationId: getWalletBalance
+      summary: Получить баланс кошелька
+      description: |
+        Возвращает сохранённый баланс на момент чтения
+      parameters:
+        - name: WALLET_UUID
+          in: path
+          required: true
+          description: Идентификатор существующего кошелька
+          schema:
+            $ref: '#/components/schemas/WalletId'
+          example: 123e4567-e89b-42d3-a456-426614174000
+      responses:
+        '200':
+          description: Баланс получен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletBalance'
+              examples:
+                fundedWallet:
+                  summary: Кошелёк с положительным балансом
+                  value:
+                    walletId: 123e4567-e89b-42d3-a456-426614174000
+                    balance: 1000
+                emptyWallet:
+                  summary: Существующий кошелёк без средств
+                  value:
+                    walletId: 123e4567-e89b-42d3-a456-426614174000
+                    balance: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/WalletNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/wallets:
+    get:
+      tags: [Wallets]
+      operationId: getWalletsList
+      summary: Получить список всех кошельков
+      responses:
+        '200':
+          description: Список кошельков; если кошельков нет, возвращается пустой массив []
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletBalance'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [Wallets]
+      operationId: createWallet
+      summary: Создать новый кошелек с нулевым балансом
+      description: |
+        Этот эндпоинт добавлен в дополнение к ТЗ, только для удобства тестирования
+        Создает кошелек с нулевым балансом. Возвращает тот же payload, что и операция получения баланса
+      responses:
+        '201':
+          description: Кошелек создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletBalance'
+              examples:
+                deposited:
+                  summary: Результат создания нового кошелька
+                  value:
+                    walletId: 123e4567-e89b-42d3-a456-426614174000
+                    balance: 0
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  schemas:
+    WalletId:
+      type: string
+      format: uuid
+      description: UUID кошелька
+      examples:
+        - 123e4567-e89b-42d3-a456-426614174000
+
+    WalletOperationRequest:
+      type: object
+      additionalProperties: false
+      required: [walletId, operationType, amount]
+      properties:
+        walletId:
+          $ref: '#/components/schemas/WalletId'
+        operationType:
+          type: string
+          enum: [DEPOSIT, WITHDRAW]
+          description: DEPOSIT — пополнение, WITHDRAW — списание
+        amount:
+          type: integer
+          format: int64
+          minimum: 1
+          description: |
+            Положительная сумма в центах (1 <= x <= 2^63-1).
+            Например, amount: 1000 - это 1000 центов или 10 долларов
+          examples: [1000]
+
+    WalletBalance:
+      type: object
+      additionalProperties: false
+      required: [walletId, balance]
+      properties:
+        walletId:
+          $ref: '#/components/schemas/WalletId'
+        balance:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            Неотрицательная сумма в центах (0 <= x <= 2^63-1).
+            Например, balance: 1000 - это 1000 центов или 10 долларов
+          examples: [0, 1000]
+
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - INVALID_REQUEST
+            - WALLET_NOT_FOUND
+            - INSUFFICIENT_FUNDS
+            - BALANCE_LIMIT_EXCEEDED
+            - INTERNAL_ERROR
+        message:
+          type: string
+          examples: [Недостаточно средств]
+
+  responses:
+    BadRequest:
+      description: |
+        Некорректные входные данные. Для GET - неверный UUID, для POST - невалидный JSON, пропущенное или неизвестное поле,неверный UUID, недопустимый тип операции или сумма вне диапазона
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            invalidUuid:
+              summary: Значение UUID имеет неверный формат
+              value:
+                code: INVALID_REQUEST
+                message: "Некорректный формат UUID: 'abvgdejz'"
+
+    WalletNotFound:
+      description: Кошелька с указанным UUID не существует; новый кошелёк не создаётся
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            walletNotFound:
+              value:
+                code: WALLET_NOT_FOUND
+                message: Кошелёк не найден
+
+    InternalError:
+      description: |
+        Непредвиденная ошибка сервера
+        Результат фиксации в БД неизвестен
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            internalError:
+              value:
+                code: INTERNAL_ERROR
+                message: Внутренняя ошибка сервера
