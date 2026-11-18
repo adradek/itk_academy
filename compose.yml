@@ -11,6 +11,9 @@ services:
         condition: service_completed_successfully
     volumes:
       - .:/src
+      - go_mod_cache:/tmp/go-mod
+      - go_build_cache:/tmp/go-build
+
     entrypoint: []
     command: ["go", "run", "./cmd/api"]
     environment:
@@ -41,4 +44,6 @@ services:
       retries: 10
 
 volumes:
+  go_build_cache:
+  go_mod_cache:
   postgres_data:
