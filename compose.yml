@@ -3,11 +3,12 @@ services:
     build: .
     env_file: .env/config.env
     ports:
-      # - "127.0.0.1:${HOST_PORT:?HOST_PORT is required}:${SERVER_PORT}"
       - "${HOST_PORT}:${SERVER_PORT}"
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - .:/src
     entrypoint: []
@@ -15,6 +16,18 @@ services:
     environment:
       GOCACHE: /tmp/go-build
       GOMODCACHE: /tmp/go-mod
+
+  migrate:
+    image: migrate/migrate:v4.20.1
+    volumes:
+      - ./db/migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}?sslmode=disable"
+      - "up"
 
   postgres:
     image: postgres:18.7
