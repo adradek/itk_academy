@@ -1,0 +1,31 @@
+services:
+  web:
+    build: .
+    env_file: .env/config.env
+    ports:
+      # - "127.0.0.1:${HOST_PORT:?HOST_PORT is required}:${SERVER_PORT}"
+      - "${HOST_PORT}:${SERVER_PORT}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/src
+    entrypoint: []
+    command: ["go", "run", "./cmd/api"]
+    environment:
+      GOCACHE: /tmp/go-build
+      GOMODCACHE: /tmp/go-mod
+
+  postgres:
+    image: postgres:18.7
+    env_file: .env/config.env
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
