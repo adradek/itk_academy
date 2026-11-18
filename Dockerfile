@@ -2,6 +2,7 @@ FROM golang:1.26.4
 WORKDIR /src
 COPY go.mod go.sum ./
 COPY cmd/ ./cmd/
+COPY internal/ ./internal/
 
 RUN CGO_ENABLED=0 go build -o /api ./cmd/api
 

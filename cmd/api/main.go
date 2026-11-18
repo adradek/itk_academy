@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"example.com/wallet/internal/httpapi"
+	"example.com/wallet/internal/wallet"
 )
 
 func main() {
@@ -37,6 +40,10 @@ func main() {
 		log.Fatalf("wallet api: %s", err)
 	}
 
+	repo := wallet.NewRepository(pool)
+	handler := httpapi.NewHandler(repo)
+
+	http.HandleFunc("POST /api/v1/wallets", handler.CreateWallet)
 	http.HandleFunc("GET /health", health)
 
 	err = http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
