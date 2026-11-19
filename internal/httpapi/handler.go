@@ -106,6 +106,33 @@ func (h *Handler) GetWallet(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) GetWalletsList(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+
+	w.Header().Set("Content-Type", "application/json")
+
+	wlts, err := h.repo.List(ctx)
+	if err != nil {
+		log.Printf("list wallets: %v", err)
+		respondWithError(w, "Internal server error", "INTERNAL_ERROR")
+		return
+	}
+
+	responsePayload := make([]walletResponse, 0, len(wlts))
+	for _, wlt := range wlts {
+		responsePayload = append(responsePayload, walletResponse{
+			WalletID: wlt.ID,
+			Balance:  wlt.Balance,
+		})
+	}
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(responsePayload); err != nil {
+		log.Printf("write wallets response: %v", err)
+	}
+}
+
 func (h *Handler) ChangeWalletBalance(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
