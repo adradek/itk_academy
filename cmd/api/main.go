@@ -45,6 +45,7 @@ func main() {
 
 	http.HandleFunc("GET /api/v1/wallets/{WALLET_UUID}", handler.GetWallet)
 	http.HandleFunc("POST /api/v1/wallets", handler.CreateWallet)
+	http.HandleFunc("POST /api/v1/wallet", handler.ChangeWalletBalance)
 	http.HandleFunc("GET /health", health)
 
 	err = http.ListenAndServe(fmt.Sprintf(":%d", port), nil)

@@ -18,6 +18,12 @@ type walletResponse struct {
 	Balance  int64  `json:"balance"`
 }
 
+type walletOperationRequest struct {
+	WalletID      string `json:"walletId"`
+	OperationType string `json:"operationType"`
+	Amount        int64  `json:"amount"`
+}
+
 type errorResponse struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
@@ -100,6 +106,67 @@ func (h *Handler) GetWallet(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) ChangeWalletBalance(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var request walletOperationRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		respondWithError(w, "Invalid JSON request", "INVALID_REQUEST")
+		return
+	}
+	if !validUUID(request.WalletID) {
+		respondWithError(w, "Invalid wallet UUID", "INVALID_REQUEST")
+		return
+	}
+	if request.Amount <= 0 {
+		respondWithError(w, "Amount must be positive", "INVALID_REQUEST")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+
+	var updated wallet.Wallet
+	var err error
+	switch request.OperationType {
+	case "DEPOSIT":
+		updated, err = h.repo.Deposit(ctx, request.WalletID, request.Amount)
+	case "WITHDRAW":
+		updated, err = h.repo.Withdraw(ctx, request.WalletID, request.Amount)
+	default:
+		respondWithError(w, "Operation type must be DEPOSIT or WITHDRAW", "INVALID_REQUEST")
+		return
+	}
+
+	if err != nil {
+		switch {
+		case errors.Is(err, wallet.ErrNotFound):
+			respondWithError(w, "Wallet not found", "WALLET_NOT_FOUND")
+		case errors.Is(err, wallet.ErrInvalidAmount):
+			respondWithError(w, "Amount must be positive", "INVALID_REQUEST")
+		case errors.Is(err, wallet.ErrInsufficientFunds):
+			respondWithError(w, "Insufficient funds", "INSUFFICIENT_FUNDS")
+		case errors.Is(err, wallet.ErrBalanceLimitExceeded):
+			respondWithError(w, "Balance limit exceeded", "BALANCE_LIMIT_EXCEEDED")
+		default:
+			log.Printf("change wallet balance: %v", err)
+			respondWithError(w, "Internal server error", "INTERNAL_ERROR")
+		}
+		return
+	}
+
+	responsePayload := walletResponse{
+		WalletID: updated.ID,
+		Balance:  updated.Balance,
+	}
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(responsePayload); err != nil {
+		log.Printf("write wallet response: %v", err)
+	}
+}
+
 func validUUID(uuid string) bool {
 	return uuidPattern.MatchString(uuid)
 }
@@ -112,6 +179,8 @@ func respondWithError(w http.ResponseWriter, message string, code string) {
 		w.WriteHeader(http.StatusBadRequest)
 	case "WALLET_NOT_FOUND":
 		w.WriteHeader(http.StatusNotFound)
+	case "INSUFFICIENT_FUNDS", "BALANCE_LIMIT_EXCEEDED":
+		w.WriteHeader(http.StatusConflict)
 	case "INTERNAL_ERROR":
 		w.WriteHeader(http.StatusInternalServerError)
 	}
