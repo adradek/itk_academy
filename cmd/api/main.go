@@ -43,6 +43,7 @@ func main() {
 	repo := wallet.NewRepository(pool)
 	handler := httpapi.NewHandler(repo)
 
+	http.HandleFunc("GET /api/v1/wallets/{WALLET_UUID}", handler.GetWallet)
 	http.HandleFunc("POST /api/v1/wallets", handler.CreateWallet)
 	http.HandleFunc("GET /health", health)
 
