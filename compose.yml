@@ -22,15 +22,22 @@ services:
 
   migrate:
     image: migrate/migrate:v4.20.1
+    env_file: .env/config.env
     volumes:
       - ./db/migrations:/migrations:ro
     depends_on:
       postgres:
         condition: service_healthy
+    entrypoint: ["/bin/sh", "-ec"]
     command:
-      - "-path=/migrations"
-      - "-database=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}?sslmode=disable"
-      - "up"
+      - |
+        : "$${POSTGRES_DB:?POSTGRES_DB is required}"
+        : "$${POSTGRES_TEST_DB:?POSTGRES_TEST_DB is required}"
+        for database in "$${POSTGRES_DB}" "$${POSTGRES_TEST_DB}"; do
+          echo "Applying migrations to $${database}"
+          migrate -path=/migrations \
+            -database="postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@$${POSTGRES_HOST}:5432/$${database}?sslmode=disable" up
+        done
 
   postgres:
     image: postgres:18.7
