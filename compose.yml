@@ -20,14 +20,24 @@ services:
       GOCACHE: /tmp/go-build
       GOMODCACHE: /tmp/go-mod
 
+  prepare-test-db:
+    image: postgres:18.7
+    env_file: .env/config.env
+    volumes:
+      - ./db/prepare-test-db.sh:/scripts/prepare-test-db.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/scripts/prepare-test-db.sh"]
+
   migrate:
     image: migrate/migrate:v4.20.1
     env_file: .env/config.env
     volumes:
       - ./db/migrations:/migrations:ro
     depends_on:
-      postgres:
-        condition: service_healthy
+      prepare-test-db:
+        condition: service_completed_successfully
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
