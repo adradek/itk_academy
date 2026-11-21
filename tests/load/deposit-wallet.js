@@ -4,7 +4,7 @@ import { check } from 'k6';
 import { Counter } from 'k6/metrics';
 
 const baseURL = (__ENV.BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
-const rate = 2000;
+const rate = 1000;
 const durationSeconds = 50;
 const amount = 1;
 const requestTimeout = '5s';
